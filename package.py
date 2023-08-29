@@ -8,7 +8,7 @@ authors = ["Kern Attila Germain"]
 
 requires = ["PySide2"]
 
-cachable = True
+cachable = False
 
 def commands():
     env.PYTHONPATH.append("{root}")

@@ -10,6 +10,7 @@ import opencue.api
 @dataclass
 class NimbyState:
     DEFAULT_STATE: str = "undefined"
+    ERROR_STATE: str = "error"
     AVAILABLE_STATE: str = "available"
     DISABLED_STATE: str = "disabled"
     WORKING_STATE: str = "working"
@@ -17,6 +18,7 @@ class NimbyState:
 
 class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
     UNDEFINED_ICON = "opencue-undefined.png"
+    ERROR_ICON = "opencue-error.png"
     AVAILABLE_ICON = "opencue-available.png"
     DISABLED_ICON = "opencue-disabled.png"
     WORKING_ICON = "opencue-working.png"
@@ -76,6 +78,8 @@ class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
             self.set_working()
         elif state == NimbyState.DISABLED_STATE:
             self.set_disabled()
+        elif state == NimbyState.ERROR_STATE:
+            self.set_failed()
         else:
             print(f"State undefined: {state}")
             self._state = NimbyState.DEFAULT_STATE
@@ -87,8 +91,9 @@ class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
 
     async def receive_machine_state(self, reader, writer):
         data = await reader.read(100)
-        rqd_state = data.decode()
-        print(f"Received state: {rqd_state=}")
+        rqd_state, message = data.decode()
+        print(f"Received state: {rqd_state=}, {message=}")
+        self.setToolTip(message)
         self.state = rqd_state
         confirmation = f"State received: {rqd_state=}"
         writer.write(confirmation.encode())
@@ -127,6 +132,10 @@ class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
     def set_working(self):
         self.setIcon(QtGui.QIcon(self.WORKING_ICON))
         self.state = NimbyState.WORKING_STATE
+
+    def set_failed(self):
+        self.setIcon(QtGui.QIcon(self.ERROR_ICON))
+        self.state = NimbyState.ERROR_STATE
 
     def set_undefined(self):
         self.setIcon(QtGui.QIcon(self.UNDEFINED_ICON))

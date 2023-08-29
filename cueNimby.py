@@ -36,11 +36,11 @@ class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
         menu = QtWidgets.QMenu(parent)
 
         activate = menu.addAction("Set Available")
-        activate.triggered.connect(self.set_available)
+        activate.triggered.connect(self.unlock_host)
         activate.setIcon(QtGui.QIcon(self.AVAILABLE_ICON))
 
         disable = menu.addAction("Set Disabled")
-        disable.triggered.connect(self.set_disabled)
+        disable.triggered.connect(self.lock_host)
         disable.setIcon(QtGui.QIcon(self.DISABLED_ICON))
 
         menu.addSeparator()
@@ -119,27 +119,26 @@ class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
         if reason == self.DoubleClick:
             ...
 
-    def set_available(self):
+    def unlock_host(self):
         self.host.unlock()
+
+    def lock_host(self):
+        self.host.lock()
+
+    def set_available(self):
         self.setIcon(QtGui.QIcon(self.AVAILABLE_ICON))
-        self.state = NimbyState.AVAILABLE_STATE
 
     def set_disabled(self):
-        self.host.lock()
         self.setIcon(QtGui.QIcon(self.DISABLED_ICON))
-        self.state = NimbyState.DISABLED_STATE
 
     def set_working(self):
         self.setIcon(QtGui.QIcon(self.WORKING_ICON))
-        self.state = NimbyState.WORKING_STATE
 
     def set_failed(self):
         self.setIcon(QtGui.QIcon(self.ERROR_ICON))
-        self.state = NimbyState.ERROR_STATE
 
     def set_undefined(self):
         self.setIcon(QtGui.QIcon(self.UNDEFINED_ICON))
-        self.state = NimbyState.WORKING_STATE
 
 
 def main():

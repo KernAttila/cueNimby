@@ -17,11 +17,12 @@ class NimbyState:
 
 
 class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
-    UNDEFINED_ICON = "opencue-undefined.png"
-    ERROR_ICON = "opencue-error.png"
-    AVAILABLE_ICON = "opencue-available.png"
-    DISABLED_ICON = "opencue-disabled.png"
-    WORKING_ICON = "opencue-working.png"
+    _pwd = os.path.dirname(__file__)
+    UNDEFINED_ICON = os.path.join(_pwd, "opencue-undefined.png")
+    ERROR_ICON = os.path.join(_pwd, "opencue-error.png")
+    AVAILABLE_ICON = os.path.join(_pwd, "opencue-available.png")
+    DISABLED_ICON = os.path.join(_pwd, "opencue-disabled.png")
+    WORKING_ICON = os.path.join(_pwd, "opencue-working.png")
 
     TOOLTIP = 'Cue Nimby 0.1.0 - {workstation}: {state}'
 

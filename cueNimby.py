@@ -1,5 +1,6 @@
 import sys
 import os
+import json
 from dataclasses import dataclass
 import asyncio
 from PySide2 import QtWidgets, QtGui
@@ -24,7 +25,7 @@ class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
     DISABLED_ICON = os.path.join(_pwd, "opencue-disabled.png")
     WORKING_ICON = os.path.join(_pwd, "opencue-working.png")
 
-    TOOLTIP = 'Cue Nimby 0.1.0 - {workstation}: {state}'
+    TOOLTIP = 'Cue Nimby 0.1.0 - {workstation}: {state}\n{extra}'
 
     def __init__(self, parent=None):
         QtWidgets.QSystemTrayIcon.__init__(self, QtGui.QIcon(self.UNDEFINED_ICON), parent)
@@ -32,7 +33,8 @@ class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
         self.workstation = os.getenv("HOSTNAME")
         self._host = None
         self._state = NimbyState.DEFAULT_STATE
-        self.state = NimbyState.DEFAULT_STATE
+        self.message = ""
+        self.current_frames = {}
 
         menu = QtWidgets.QMenu(parent)
 
@@ -47,18 +49,29 @@ class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
         menu.addSeparator()
 
         close = menu.addAction("Quit Tray (rqd will still be running)")
-        close.triggered.connect(lambda: sys.exit())
+        close.triggered.connect(self.close_tray)
         close.setIcon(QtGui.QIcon("quit.png"))
 
         self.setContextMenu(menu)
+
         if self.host.isLocked():
-            self.set_disabled()
+            print("host locked")
+            self.state = NimbyState.DISABLED_STATE
+        elif self.host.coresReserved() > 0.0:
+            print("host working")
+            self.state = NimbyState.WORKING_STATE
         else:
-            self.set_available()
+            print("host free")
+            self.state = NimbyState.AVAILABLE_STATE
 
         self.activated.connect(self.onTrayIconActivated)
 
-        asyncio.run(self.listen_rqd())
+        self.server_thread = threading.Thread(target=lambda: asyncio.run(self.listen_rqd()))
+        self.server_thread.start()
+
+    def close_tray(self):
+        os.system('kill %d' % os.getpid())
+
 
     @property
     def host(self):
@@ -86,15 +99,18 @@ class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
             self._state = NimbyState.DEFAULT_STATE
             self.set_undefined()
 
-        self.setToolTip(self.TOOLTIP.format(
+        message = self.TOOLTIP.format(
             state=self._state.capitalize(),
-            workstation=self.workstation))
+            workstation=self.workstation,
+            extra=self.message)
+        self.setToolTip(message)
+        self.showMessage("OpenCue", message)
 
     async def receive_machine_state(self, reader, writer):
-        data = await reader.read(100)
-        rqd_state, message = data.decode()
+        data = await reader.read(300)
+        rqd_state, message = json.loads(data.decode())
         print(f"Received state: {rqd_state=}, {message=}")
-        self.setToolTip(message)
+        self.message = message
         self.state = rqd_state
         confirmation = f"State received: {rqd_state=}"
         writer.write(confirmation.encode())
@@ -102,17 +118,17 @@ class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
         writer.close()
 
     async def listen_rqd(self):
-        server = await asyncio.start_server(
+        self.server = await asyncio.start_server(
             client_connected_cb=self.receive_machine_state,
             host='127.0.0.1',
             port=1546,
         )
 
-        addr = server.sockets[0].getsockname()
+        addr = self.server.sockets[0].getsockname()
         print(f'Listening to RQD on {addr}')
 
-        async with server:
-            await server.serve_forever()
+        async with self.server:
+            await self.server.serve_forever()
 
     def onTrayIconActivated(self, reason):
         if reason == self.Trigger:

@@ -1,12 +1,18 @@
 import sys
 import os
+import platform
+import threading
 import json
 from dataclasses import dataclass
 import asyncio
 from PySide2 import QtWidgets, QtGui
 
 import opencue.api
+import opencue.exception
 
+
+RQD_HOST = '127.0.0.1'
+RQD_TRAY_PORT = 1546
 
 @dataclass
 class NimbyState:
@@ -25,12 +31,12 @@ class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
     DISABLED_ICON = os.path.join(_pwd, "opencue-disabled.png")
     WORKING_ICON = os.path.join(_pwd, "opencue-working.png")
 
-    TOOLTIP = 'Cue Nimby 0.1.0 - {workstation}: {state}\n{extra}'
+    TOOLTIP = 'OpenCueTray-0.1.0 - {workstation}: {state}\n{extra}'
 
     def __init__(self, parent=None):
         QtWidgets.QSystemTrayIcon.__init__(self, QtGui.QIcon(self.UNDEFINED_ICON), parent)
 
-        self.workstation = os.getenv("HOSTNAME")
+        self.workstation = os.getenv("HOSTNAME") or platform.node()
         self._host = None
         self._state = NimbyState.DEFAULT_STATE
         self.message = ""
@@ -53,11 +59,14 @@ class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
         close.setIcon(QtGui.QIcon("quit.png"))
 
         self.setContextMenu(menu)
-
-        if self.host.isLocked():
+        host = self.host
+        if host is None:
+            print("Could not reach server")
+            self.state = NimbyState.DISABLED_STATE
+        elif host.isLocked():
             print("host locked")
             self.state = NimbyState.DISABLED_STATE
-        elif self.host.coresReserved() > 0.0:
+        elif host.coresReserved() > 0.0:
             print("host working")
             self.state = NimbyState.WORKING_STATE
         else:
@@ -72,11 +81,15 @@ class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
     def close_tray(self):
         os.system('kill %d' % os.getpid())
 
-
     @property
     def host(self):
-        self._host = opencue.api.findHost(self.workstation)
-        return self._host
+        try:
+            self._host = opencue.api.findHost(self.workstation)
+        except opencue.exception.ConnectionException as error:
+            self.message = "Could not reach server"
+            self.state = NimbyState.ERROR_STATE
+        else:
+            return self._host
 
     @property
     def state(self):
@@ -118,11 +131,15 @@ class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
         writer.close()
 
     async def listen_rqd(self):
-        self.server = await asyncio.start_server(
-            client_connected_cb=self.receive_machine_state,
-            host='127.0.0.1',
-            port=1546,
-        )
+        try:
+            self.server = await asyncio.start_server(
+                client_connected_cb=self.receive_machine_state,
+                host=RQD_HOST,
+                port=RQD_TRAY_PORT,
+            )
+        except OSError:
+            print("CueTray already running")
+            self.close_tray()
 
         addr = self.server.sockets[0].getsockname()
         print(f'Listening to RQD on {addr}')
